@@ -367,6 +367,156 @@ enum ToolHandlers {
             )
         }
     }
+
+    // MARK: - batch_create_reminders
+
+    static func batchCreateReminders(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let itemsValue = args["items"],
+              case .array(let items) = itemsValue,
+              !items.isEmpty
+        else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: items (must be a non-empty array)")],
+                isError: true
+            )
+        }
+
+        var created: [ReminderDTO] = []
+        var failed: [BatchFailure] = []
+        let iso = ISO8601DateFormatter()
+
+        for (index, item) in items.enumerated() {
+            guard case .object(let obj) = item,
+                  let title = obj["title"]?.stringValue,
+                  !title.isEmpty
+            else {
+                failed.append(BatchFailure(index: index, error: "Missing required field: title"))
+                continue
+            }
+
+            let notes = obj["notes"]?.stringValue
+            let list  = obj["list"]?.stringValue
+
+            let dueDate: Date?
+            if let s = obj["due_date"]?.stringValue {
+                guard let d = iso.date(from: s) else {
+                    failed.append(BatchFailure(index: index, error: "Invalid due_date: expected ISO 8601"))
+                    continue
+                }
+                dueDate = d
+            } else {
+                dueDate = nil
+            }
+
+            let priority: Priority
+            if let s = obj["priority"]?.stringValue {
+                guard let p = Priority(rawValue: s) else {
+                    failed.append(BatchFailure(index: index, error: "Invalid priority: \(s)"))
+                    continue
+                }
+                priority = p
+            } else {
+                priority = .none
+            }
+
+            do {
+                let r = try await service.createReminder(title: title, notes: notes, dueDate: dueDate, priority: priority, list: list)
+                created.append(r)
+            } catch {
+                failed.append(BatchFailure(index: index, error: error.localizedDescription))
+            }
+        }
+
+        do {
+            let json = try jsonString(BatchCreateResult(created: created, failed: failed))
+            return CallTool.Result(content: [.text(json)])
+        } catch {
+            return CallTool.Result(content: [.text("Created \(created.count) reminder(s). \(failed.count) failed.")])
+        }
+    }
+
+    // MARK: - batch_complete_reminders
+
+    static func batchCompleteReminders(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let idsValue = args["ids"],
+              case .array(let idValues) = idsValue,
+              !idValues.isEmpty
+        else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: ids (must be a non-empty array)")],
+                isError: true
+            )
+        }
+
+        var completed: [ReminderDTO] = []
+        var failed: [BatchIDFailure] = []
+
+        for idValue in idValues {
+            guard let id = idValue.stringValue, !id.isEmpty else {
+                failed.append(BatchIDFailure(id: "<invalid>", error: "ID must be a non-empty string"))
+                continue
+            }
+            do {
+                let r = try await service.completeReminder(id: id)
+                completed.append(r)
+            } catch {
+                failed.append(BatchIDFailure(id: id, error: error.localizedDescription))
+            }
+        }
+
+        do {
+            let json = try jsonString(BatchCompleteResult(completed: completed, failed: failed))
+            return CallTool.Result(content: [.text(json)])
+        } catch {
+            return CallTool.Result(content: [.text("Completed \(completed.count) reminder(s). \(failed.count) failed.")])
+        }
+    }
+
+    // MARK: - batch_delete_reminders
+
+    static func batchDeleteReminders(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let idsValue = args["ids"],
+              case .array(let idValues) = idsValue,
+              !idValues.isEmpty
+        else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: ids (must be a non-empty array)")],
+                isError: true
+            )
+        }
+
+        var deletedIDs: [String] = []
+        var failed: [BatchIDFailure] = []
+
+        for idValue in idValues {
+            guard let id = idValue.stringValue, !id.isEmpty else {
+                failed.append(BatchIDFailure(id: "<invalid>", error: "ID must be a non-empty string"))
+                continue
+            }
+            do {
+                try await service.deleteReminder(id: id)
+                deletedIDs.append(id)
+            } catch {
+                failed.append(BatchIDFailure(id: id, error: error.localizedDescription))
+            }
+        }
+
+        do {
+            let json = try jsonString(BatchDeleteResult(deletedCount: deletedIDs.count, deletedIDs: deletedIDs, failed: failed))
+            return CallTool.Result(content: [.text(json)])
+        } catch {
+            return CallTool.Result(content: [.text("Deleted \(deletedIDs.count) reminder(s). \(failed.count) failed.")])
+        }
+    }
 }
 
 // MARK: - Helpers
@@ -378,4 +528,32 @@ func jsonString<T: Encodable>(_ value: T) throws -> String {
     encoder.dateEncodingStrategy = .iso8601
     let data = try encoder.encode(value)
     return String(decoding: data, as: UTF8.self)
+}
+
+// MARK: - Batch result types
+
+private struct BatchFailure: Encodable {
+    let index: Int
+    let error: String
+}
+
+private struct BatchIDFailure: Encodable {
+    let id: String
+    let error: String
+}
+
+private struct BatchCreateResult: Encodable {
+    let created: [ReminderDTO]
+    let failed: [BatchFailure]
+}
+
+private struct BatchCompleteResult: Encodable {
+    let completed: [ReminderDTO]
+    let failed: [BatchIDFailure]
+}
+
+private struct BatchDeleteResult: Encodable {
+    let deletedCount: Int
+    let deletedIDs: [String]
+    let failed: [BatchIDFailure]
 }

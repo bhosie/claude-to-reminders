@@ -7,7 +7,7 @@ let service: any RemindersService = EventKitRemindersService()
 
 let server = Server(
     name: "reminders-middleware",
-    version: "0.5.0",
+    version: "0.6.0",
     capabilities: .init(tools: .init(listChanged: false))
 )
 
@@ -192,6 +192,64 @@ let createReminderListTool = Tool(
     ])
 )
 
+let batchCreateRemindersTool = Tool(
+    name: "batch_create_reminders",
+    description: "Create multiple reminders in one call. Returns created reminders and any failures.",
+    inputSchema: .object([
+        "type": .string("object"),
+        "properties": .object([
+            "items": .object([
+                "type": .string("array"),
+                "description": .string("Array of reminders to create."),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "title":    .object(["type": .string("string"), "description": .string("Reminder title (required).")]),
+                        "notes":    .object(["type": .string("string"), "description": .string("Optional notes.")]),
+                        "due_date": .object(["type": .string("string"), "description": .string("Optional due date (ISO 8601).")]),
+                        "priority": .object(["type": .string("string"), "description": .string("none, low, medium, or high.")]),
+                        "list":     .object(["type": .string("string"), "description": .string("Optional list name.")])
+                    ]),
+                    "required": .array([.string("title")])
+                ])
+            ])
+        ]),
+        "required": .array([.string("items")])
+    ])
+)
+
+let batchCompleteRemindersTool = Tool(
+    name: "batch_complete_reminders",
+    description: "Mark multiple reminders as completed. Returns completed reminders and any failures.",
+    inputSchema: .object([
+        "type": .string("object"),
+        "properties": .object([
+            "ids": .object([
+                "type": .string("array"),
+                "description": .string("Array of reminder IDs to complete."),
+                "items": .object(["type": .string("string")])
+            ])
+        ]),
+        "required": .array([.string("ids")])
+    ])
+)
+
+let batchDeleteRemindersTool = Tool(
+    name: "batch_delete_reminders",
+    description: "Permanently delete multiple reminders. Returns deleted IDs and any failures.",
+    inputSchema: .object([
+        "type": .string("object"),
+        "properties": .object([
+            "ids": .object([
+                "type": .string("array"),
+                "description": .string("Array of reminder IDs to delete."),
+                "items": .object(["type": .string("string")])
+            ])
+        ]),
+        "required": .array([.string("ids")])
+    ])
+)
+
 // MARK: - Tool list handler
 
 await server.withMethodHandler(ListTools.self) { _ in
@@ -205,6 +263,9 @@ await server.withMethodHandler(ListTools.self) { _ in
         deleteReminderTool,
         listReminderListsTool,
         createReminderListTool,
+        batchCreateRemindersTool,
+        batchCompleteRemindersTool,
+        batchDeleteRemindersTool,
     ])
 }
 
@@ -231,6 +292,12 @@ await server.withMethodHandler(CallTool.self) { params in
         return await ToolHandlers.listReminderLists(service: service)
     case "create_reminder_list":
         return await ToolHandlers.createReminderList(args: args, service: service)
+    case "batch_create_reminders":
+        return await ToolHandlers.batchCreateReminders(args: args, service: service)
+    case "batch_complete_reminders":
+        return await ToolHandlers.batchCompleteReminders(args: args, service: service)
+    case "batch_delete_reminders":
+        return await ToolHandlers.batchDeleteReminders(args: args, service: service)
     default:
         return CallTool.Result(
             content: [.text("Unknown tool: \(params.name)")],

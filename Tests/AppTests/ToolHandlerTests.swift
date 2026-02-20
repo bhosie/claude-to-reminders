@@ -528,6 +528,145 @@ struct CreateReminderListTests {
     }
 }
 
+// MARK: - batch_create_reminders
+
+@Suite("batch_create_reminders tool")
+struct BatchCreateRemindersTests {
+    @Test("creates multiple reminders")
+    func createsMultiple() async {
+        let mock = MockRemindersService()
+        let args: [String: Value] = [
+            "items": .array([
+                .object(["title": .string("Task A")]),
+                .object(["title": .string("Task B"), "priority": .string("high"), "list": .string("Work")])
+            ])
+        ]
+        let result = await ToolHandlers.batchCreateReminders(args: args, service: mock)
+        #expect(result.isError != true)
+        let text = result.content.first?.textValue ?? ""
+        #expect(text.contains("Task A"))
+        #expect(text.contains("Task B"))
+        #expect(mock.reminders.count == 2)
+    }
+
+    @Test("partial failure: bad item does not block others")
+    func partialFailure() async {
+        let mock = MockRemindersService()
+        let args: [String: Value] = [
+            "items": .array([
+                .object(["title": .string("Good task")]),
+                .object(["title": .string("")]),   // empty title → failure
+                .object(["title": .string("Another good task")])
+            ])
+        ]
+        let result = await ToolHandlers.batchCreateReminders(args: args, service: mock)
+        #expect(result.isError != true)
+        let text = result.content.first?.textValue ?? ""
+        #expect(text.contains("Good task"))
+        #expect(text.contains("Another good task"))
+        #expect(text.contains("failed"))
+        #expect(mock.reminders.count == 2)
+    }
+
+    @Test("returns error when items is missing")
+    func missingItems() async {
+        let result = await ToolHandlers.batchCreateReminders(args: [:], service: MockRemindersService())
+        #expect(result.isError == true)
+    }
+
+    @Test("returns error when items is empty array")
+    func emptyItems() async {
+        let result = await ToolHandlers.batchCreateReminders(args: ["items": .array([])], service: MockRemindersService())
+        #expect(result.isError == true)
+    }
+
+    @Test("invalid due_date records failure for that item")
+    func invalidDueDate() async {
+        let mock = MockRemindersService()
+        let args: [String: Value] = [
+            "items": .array([
+                .object(["title": .string("Bad date"), "due_date": .string("not-a-date")])
+            ])
+        ]
+        let result = await ToolHandlers.batchCreateReminders(args: args, service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("failed") == true)
+        #expect(mock.reminders.isEmpty)
+    }
+}
+
+// MARK: - batch_complete_reminders
+
+@Suite("batch_complete_reminders tool")
+struct BatchCompleteRemindersTests {
+    @Test("completes multiple reminders")
+    func completesMultiple() async throws {
+        let mock = MockRemindersService()
+        let r1 = try await mock.createReminder(title: "Task 1", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let r2 = try await mock.createReminder(title: "Task 2", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let args: [String: Value] = ["ids": .array([.string(r1.id), .string(r2.id)])]
+        let result = await ToolHandlers.batchCompleteReminders(args: args, service: mock)
+        #expect(result.isError != true)
+        #expect(mock.reminders[r1.id]?.completed == true)
+        #expect(mock.reminders[r2.id]?.completed == true)
+    }
+
+    @Test("partial failure: unknown ID does not block others")
+    func partialFailure() async throws {
+        let mock = MockRemindersService()
+        let r = try await mock.createReminder(title: "Real task", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let args: [String: Value] = ["ids": .array([.string(r.id), .string("ghost-id")])]
+        let result = await ToolHandlers.batchCompleteReminders(args: args, service: mock)
+        #expect(result.isError != true)
+        let text = result.content.first?.textValue ?? ""
+        #expect(text.contains("completed"))
+        #expect(text.contains("failed"))
+        #expect(mock.reminders[r.id]?.completed == true)
+    }
+
+    @Test("returns error when ids is missing")
+    func missingIds() async {
+        let result = await ToolHandlers.batchCompleteReminders(args: [:], service: MockRemindersService())
+        #expect(result.isError == true)
+    }
+}
+
+// MARK: - batch_delete_reminders
+
+@Suite("batch_delete_reminders tool")
+struct BatchDeleteRemindersTests {
+    @Test("deletes multiple reminders")
+    func deletesMultiple() async throws {
+        let mock = MockRemindersService()
+        let r1 = try await mock.createReminder(title: "Gone 1", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let r2 = try await mock.createReminder(title: "Gone 2", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let args: [String: Value] = ["ids": .array([.string(r1.id), .string(r2.id)])]
+        let result = await ToolHandlers.batchDeleteReminders(args: args, service: mock)
+        #expect(result.isError != true)
+        #expect(mock.reminders.isEmpty)
+        let text = result.content.first?.textValue ?? ""
+        #expect(text.contains("deletedCount"))
+    }
+
+    @Test("partial failure: unknown ID does not block others")
+    func partialFailure() async throws {
+        let mock = MockRemindersService()
+        let r = try await mock.createReminder(title: "Delete me", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let args: [String: Value] = ["ids": .array([.string(r.id), .string("nonexistent")])]
+        let result = await ToolHandlers.batchDeleteReminders(args: args, service: mock)
+        #expect(result.isError != true)
+        #expect(mock.reminders.isEmpty)
+        let text = result.content.first?.textValue ?? ""
+        #expect(text.contains("failed"))
+    }
+
+    @Test("returns error when ids is missing")
+    func missingIds() async {
+        let result = await ToolHandlers.batchDeleteReminders(args: [:], service: MockRemindersService())
+        #expect(result.isError == true)
+    }
+}
+
 // MARK: - Priority mapping
 
 @Suite("Priority")
