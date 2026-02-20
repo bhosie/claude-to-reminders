@@ -7,7 +7,7 @@ let service: any RemindersService = EventKitRemindersService()
 
 let server = Server(
     name: "reminders-middleware",
-    version: "0.1.0",
+    version: "0.2.0",
     capabilities: .init(tools: .init(listChanged: false))
 )
 
@@ -21,8 +21,16 @@ let healthCheckTool = Tool(
 
 let listRemindersTool = Tool(
     name: "list_reminders",
-    description: "List all incomplete reminders from Apple Reminders.",
-    inputSchema: .object(["type": .string("object"), "properties": .object([:])])
+    description: "List incomplete reminders from Apple Reminders. Use 'limit' to cap results — always specify a limit when you only need a few reminders.",
+    inputSchema: .object([
+        "type": .string("object"),
+        "properties": .object([
+            "limit": .object([
+                "type": .string("integer"),
+                "description": .string("Maximum number of reminders to return. Omit to return all.")
+            ])
+        ])
+    ])
 )
 
 let createReminderTool = Tool(
@@ -34,6 +42,23 @@ let createReminderTool = Tool(
             "title": .object([
                 "type": .string("string"),
                 "description": .string("The reminder title (required).")
+            ]),
+            "notes": .object([
+                "type": .string("string"),
+                "description": .string("Optional notes or additional detail.")
+            ]),
+            "due_date": .object([
+                "type": .string("string"),
+                "description": .string("Optional due date as ISO 8601 string (e.g. \"2026-03-01T09:00:00Z\").")
+            ]),
+            "priority": .object([
+                "type": .string("string"),
+                "enum": .array([.string("none"), .string("low"), .string("medium"), .string("high")]),
+                "description": .string("Optional priority level. Defaults to none.")
+            ]),
+            "list": .object([
+                "type": .string("string"),
+                "description": .string("Optional name of the Reminders list to add to. Falls back to the default list if not found.")
             ])
         ]),
         "required": .array([.string("title")])
@@ -54,7 +79,7 @@ await server.withMethodHandler(CallTool.self) { params in
     case "health_check":
         return ToolHandlers.healthCheck()
     case "list_reminders":
-        return await ToolHandlers.listReminders(service: service)
+        return await ToolHandlers.listReminders(args: args, service: service)
     case "create_reminder":
         return await ToolHandlers.createReminder(args: args, service: service)
     default:

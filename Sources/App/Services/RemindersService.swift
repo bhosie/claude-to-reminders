@@ -3,9 +3,15 @@ import Foundation
 /// The mockable seam between tool handlers and EventKit.
 /// All business logic in main.swift calls this protocol — never EventKit directly.
 protocol RemindersService: Sendable {
-    /// Returns all reminders from the default list.
-    func listReminders() async throws -> [ReminderDTO]
+    /// Returns reminders. Pass `limit` to cap the number returned (nil = all).
+    func listReminders(limit: Int?) async throws -> [ReminderDTO]
 
-    /// Creates a reminder with the given title and returns the created reminder.
-    func createReminder(title: String) async throws -> ReminderDTO
+    /// Creates a reminder with the given fields and returns the created reminder.
+    func createReminder(
+        title: String,
+        notes: String?,
+        dueDate: Date?,
+        priority: Priority,
+        list: String?
+    ) async throws -> ReminderDTO
 }

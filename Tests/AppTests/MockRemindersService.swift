@@ -10,20 +10,30 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
     var listError: Error?
     var createError: Error?
 
-    func listReminders() async throws -> [ReminderDTO] {
+    func listReminders(limit: Int?) async throws -> [ReminderDTO] {
         if let error = listError { throw error }
-        return Array(reminders.values)
+        var results = Array(reminders.values)
+        if let limit {
+            results = Array(results.prefix(limit))
+        }
+        return results
     }
 
-    func createReminder(title: String) async throws -> ReminderDTO {
+    func createReminder(
+        title: String,
+        notes: String?,
+        dueDate: Date?,
+        priority: Priority,
+        list: String?
+    ) async throws -> ReminderDTO {
         if let error = createError { throw error }
         let dto = ReminderDTO(
             id: UUID().uuidString,
             title: title,
-            notes: nil,
-            dueDate: nil,
-            priority: .none,
-            list: "Reminders",
+            notes: notes,
+            dueDate: dueDate,
+            priority: priority,
+            list: list ?? "Reminders",
             completed: false,
             createdAt: Date(),
             updatedAt: Date()

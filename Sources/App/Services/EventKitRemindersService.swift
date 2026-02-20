@@ -26,7 +26,7 @@ final class EventKitRemindersService: RemindersService {
 
     // MARK: - RemindersService
 
-    func listReminders() async throws -> [ReminderDTO] {
+    func listReminders(limit: Int?) async throws -> [ReminderDTO] {
         try await requestAccess()
 
         let calendars = store.calendars(for: .reminder)
@@ -37,27 +37,59 @@ final class EventKitRemindersService: RemindersService {
                     continuation.resume(returning: [])
                     return
                 }
-                let dtos = ekReminders
+                var results = ekReminders
                     .filter { !$0.isCompleted }
                     .map { ReminderDTO(from: $0) }
-                continuation.resume(returning: dtos)
+
+                if let limit {
+                    results = Array(results.prefix(limit))
+                }
+
+                continuation.resume(returning: results)
             }
         }
     }
 
-    func createReminder(title: String) async throws -> ReminderDTO {
+    func createReminder(
+        title: String,
+        notes: String?,
+        dueDate: Date?,
+        priority: Priority,
+        list: String?
+    ) async throws -> ReminderDTO {
         try await requestAccess()
 
-        guard let defaultCalendar = store.defaultCalendarForNewReminders() else {
+        // Find the named list, fall back to the default list.
+        let calendar = namedCalendar(list) ?? store.defaultCalendarForNewReminders()
+        guard let calendar else {
             throw ServiceError.noDefaultList
         }
 
         let reminder = EKReminder(eventStore: store)
         reminder.title = title
-        reminder.calendar = defaultCalendar
+        reminder.calendar = calendar
+        reminder.notes = notes
+        reminder.priority = priority.ekValue
+
+        if let dueDate {
+            // EventKit stores due dates as DateComponents, not Date.
+            reminder.dueDateComponents = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: dueDate
+            )
+        }
 
         try store.save(reminder, commit: true)
         return ReminderDTO(from: reminder)
+    }
+
+    // MARK: - Helpers
+
+    /// Returns the EKCalendar with the given name, or nil if not found.
+    private func namedCalendar(_ name: String?) -> EKCalendar? {
+        guard let name, !name.isEmpty else { return nil }
+        return store.calendars(for: .reminder)
+            .first { $0.title.lowercased() == name.lowercased() }
     }
 
     // MARK: - Errors
@@ -79,7 +111,7 @@ final class EventKitRemindersService: RemindersService {
 
 // MARK: - EKReminder → ReminderDTO
 
-private extension ReminderDTO {
+extension ReminderDTO {
     init(from reminder: EKReminder) {
         self.id = reminder.calendarItemIdentifier
         self.title = reminder.title ?? ""
