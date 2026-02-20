@@ -2,7 +2,6 @@
 import Foundation
 
 /// Real implementation of RemindersService backed by Apple's EventKit.
-/// Requests permission on first use and caches the EKEventStore.
 final class EventKitRemindersService: RemindersService {
     // EKEventStore is internally thread-safe; @preconcurrency import suppresses the
     // Sendable warning from the Obj-C framework header.
@@ -17,30 +16,72 @@ final class EventKitRemindersService: RemindersService {
         } else {
             granted = try await store.requestAccess(to: .reminder)
         }
-        guard granted else {
-            throw ServiceError.permissionDenied
-        }
+        guard granted else { throw ServiceError.permissionDenied }
     }
 
     // MARK: - RemindersService
 
-    func listReminders(limit: Int?) async throws -> [ReminderDTO] {
+    func listReminders(
+        limit: Int?,
+        query: String?,
+        completed: Bool?,
+        priority: Priority?,
+        list: String?,
+        dueBefore: Date?,
+        dueAfter: Date?
+    ) async throws -> [ReminderDTO] {
         try await requestAccess()
 
-        let calendars = store.calendars(for: .reminder)
+        // Narrow to a specific calendar if a list name is provided.
+        let calendars: [EKCalendar]
+        if let list, !list.isEmpty, let cal = namedCalendar(list) {
+            calendars = [cal]
+        } else {
+            calendars = store.calendars(for: .reminder)
+        }
+
+        // Use the appropriate EventKit predicate based on completion filter.
+        let wantCompleted = completed == true
+
         return try await withCheckedThrowingContinuation { continuation in
-            let predicate = store.predicateForReminders(in: calendars)
+            let predicate: NSPredicate
+            if wantCompleted {
+                predicate = store.predicateForCompletedReminders(
+                    withCompletionDateStarting: nil, ending: nil, calendars: calendars)
+            } else {
+                predicate = store.predicateForIncompleteReminders(
+                    withDueDateStarting: nil, ending: nil, calendars: calendars)
+            }
+
             store.fetchReminders(matching: predicate) { ekReminders in
                 guard let ekReminders else {
                     continuation.resume(returning: [])
                     return
                 }
-                var results = ekReminders
-                    .filter { !$0.isCompleted }
-                    .map { ReminderDTO(from: $0) }
+
+                var results = ekReminders.map { ReminderDTO(from: $0) }
+
+                // In-memory filters
+                if let query, !query.isEmpty {
+                    let q = query.lowercased()
+                    results = results.filter {
+                        $0.title.lowercased().contains(q) ||
+                        ($0.notes?.lowercased().contains(q) ?? false)
+                    }
+                }
+                if let priority {
+                    results = results.filter { $0.priority == priority }
+                }
+                if let dueAfter {
+                    results = results.filter { $0.dueDate.map { $0 >= dueAfter } ?? false }
+                }
+                if let dueBefore {
+                    results = results.filter { $0.dueDate.map { $0 <= dueBefore } ?? false }
+                }
                 if let limit {
                     results = Array(results.prefix(limit))
                 }
+
                 continuation.resume(returning: results)
             }
         }
@@ -48,8 +89,7 @@ final class EventKitRemindersService: RemindersService {
 
     func getReminder(id: String) async throws -> ReminderDTO {
         try await requestAccess()
-        let reminder = try fetchReminder(id: id)
-        return ReminderDTO(from: reminder)
+        return ReminderDTO(from: try fetchReminder(id: id))
     }
 
     func createReminder(
@@ -115,8 +155,7 @@ final class EventKitRemindersService: RemindersService {
 
     func deleteReminder(id: String) async throws {
         try await requestAccess()
-        let reminder = try fetchReminder(id: id)
-        try store.remove(reminder, commit: true)
+        try store.remove(try fetchReminder(id: id), commit: true)
     }
 
     // MARK: - Helpers
@@ -124,9 +163,7 @@ final class EventKitRemindersService: RemindersService {
     private func fetchReminder(id: String) throws -> EKReminder {
         guard let item = store.calendarItem(withIdentifier: id),
               let reminder = item as? EKReminder
-        else {
-            throw ServiceError.reminderNotFound(id)
-        }
+        else { throw ServiceError.reminderNotFound(id) }
         return reminder
     }
 

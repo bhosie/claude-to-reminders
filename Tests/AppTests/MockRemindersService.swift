@@ -12,18 +12,49 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
     var completeError: Error?
     var deleteError: Error?
 
-    func listReminders(limit: Int?) async throws -> [ReminderDTO] {
+    func listReminders(
+        limit: Int?,
+        query: String?,
+        completed: Bool?,
+        priority: Priority?,
+        list: String?,
+        dueBefore: Date?,
+        dueAfter: Date?
+    ) async throws -> [ReminderDTO] {
         if let error = listError { throw error }
+
+        let wantCompleted = completed == true
         var results = Array(reminders.values)
-        if let limit { results = Array(results.prefix(limit)) }
+            .filter { $0.completed == wantCompleted }
+
+        if let query, !query.isEmpty {
+            let q = query.lowercased()
+            results = results.filter {
+                $0.title.lowercased().contains(q) ||
+                ($0.notes?.lowercased().contains(q) ?? false)
+            }
+        }
+        if let priority {
+            results = results.filter { $0.priority == priority }
+        }
+        if let dueAfter {
+            results = results.filter { $0.dueDate.map { $0 >= dueAfter } ?? false }
+        }
+        if let dueBefore {
+            results = results.filter { $0.dueDate.map { $0 <= dueBefore } ?? false }
+        }
+        if let list, !list.isEmpty {
+            results = results.filter { $0.list.lowercased() == list.lowercased() }
+        }
+        if let limit {
+            results = Array(results.prefix(limit))
+        }
         return results
     }
 
     func getReminder(id: String) async throws -> ReminderDTO {
         if let error = getError { throw error }
-        guard let reminder = reminders[id] else {
-            throw MockError.notFound(id)
-        }
+        guard let reminder = reminders[id] else { throw MockError.notFound(id) }
         return reminder
     }
 
@@ -59,9 +90,7 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
         list: String?
     ) async throws -> ReminderDTO {
         if let error = updateError { throw error }
-        guard let existing = reminders[id] else {
-            throw MockError.notFound(id)
-        }
+        guard let existing = reminders[id] else { throw MockError.notFound(id) }
         let updated = ReminderDTO(
             id: existing.id,
             title: title ?? existing.title,
@@ -79,9 +108,7 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
 
     func completeReminder(id: String) async throws -> ReminderDTO {
         if let error = completeError { throw error }
-        guard let existing = reminders[id] else {
-            throw MockError.notFound(id)
-        }
+        guard let existing = reminders[id] else { throw MockError.notFound(id) }
         let updated = ReminderDTO(
             id: existing.id,
             title: existing.title,
@@ -99,9 +126,7 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
 
     func deleteReminder(id: String) async throws {
         if let error = deleteError { throw error }
-        guard reminders[id] != nil else {
-            throw MockError.notFound(id)
-        }
+        guard reminders[id] != nil else { throw MockError.notFound(id) }
         reminders.removeValue(forKey: id)
     }
 

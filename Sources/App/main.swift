@@ -7,7 +7,7 @@ let service: any RemindersService = EventKitRemindersService()
 
 let server = Server(
     name: "reminders-middleware",
-    version: "0.3.0",
+    version: "0.4.0",
     capabilities: .init(tools: .init(listChanged: false))
 )
 
@@ -21,13 +21,38 @@ let healthCheckTool = Tool(
 
 let listRemindersTool = Tool(
     name: "list_reminders",
-    description: "List incomplete reminders from Apple Reminders. Use 'limit' to cap results — always specify a limit when you only need a few reminders.",
+    description: "List reminders from Apple Reminders with optional filters. Use 'limit' to cap results — always specify a limit when you only need a few reminders.",
     inputSchema: .object([
         "type": .string("object"),
         "properties": .object([
             "limit": .object([
                 "type": .string("integer"),
                 "description": .string("Maximum number of reminders to return. Omit to return all.")
+            ]),
+            "query": .object([
+                "type": .string("string"),
+                "description": .string("Case-insensitive text search across title and notes.")
+            ]),
+            "completed": .object([
+                "type": .string("boolean"),
+                "description": .string("Filter by completion status. Omit (or false) for incomplete reminders, true for completed.")
+            ]),
+            "priority": .object([
+                "type": .string("string"),
+                "enum": .array([.string("none"), .string("low"), .string("medium"), .string("high")]),
+                "description": .string("Filter to a specific priority level.")
+            ]),
+            "list": .object([
+                "type": .string("string"),
+                "description": .string("Filter to a specific reminder list name.")
+            ]),
+            "due_before": .object([
+                "type": .string("string"),
+                "description": .string("Only include reminders due before this ISO 8601 datetime.")
+            ]),
+            "due_after": .object([
+                "type": .string("string"),
+                "description": .string("Only include reminders due after this ISO 8601 datetime.")
             ])
         ])
     ])

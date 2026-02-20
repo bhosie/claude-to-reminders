@@ -17,6 +17,7 @@ enum ToolHandlers {
         args: [String: Value],
         service: any RemindersService
     ) async -> CallTool.Result {
+        // limit
         let limit: Int?
         if let limitValue = args["limit"] {
             guard let n = limitValue.intValue, n > 0 else {
@@ -30,10 +31,80 @@ enum ToolHandlers {
             limit = nil
         }
 
+        // completed
+        let completed: Bool?
+        if let completedValue = args["completed"] {
+            guard let b = completedValue.boolValue else {
+                return CallTool.Result(
+                    content: [.text("Invalid argument: 'completed' must be a boolean.")],
+                    isError: true
+                )
+            }
+            completed = b
+        } else {
+            completed = nil
+        }
+
+        // priority
+        let priority: Priority?
+        if let priorityValue = args["priority"] {
+            guard let raw = priorityValue.stringValue, let p = Priority(rawValue: raw) else {
+                return CallTool.Result(
+                    content: [.text("Invalid argument: 'priority' must be one of: none, low, medium, high.")],
+                    isError: true
+                )
+            }
+            priority = p
+        } else {
+            priority = nil
+        }
+
+        // due_before / due_after
+        let dueBefore: Date?
+        if let v = args["due_before"] {
+            guard let s = v.stringValue, let d = ISO8601DateFormatter().date(from: s) else {
+                return CallTool.Result(
+                    content: [.text("Invalid argument: 'due_before' must be an ISO 8601 datetime string.")],
+                    isError: true
+                )
+            }
+            dueBefore = d
+        } else {
+            dueBefore = nil
+        }
+
+        let dueAfter: Date?
+        if let v = args["due_after"] {
+            guard let s = v.stringValue, let d = ISO8601DateFormatter().date(from: s) else {
+                return CallTool.Result(
+                    content: [.text("Invalid argument: 'due_after' must be an ISO 8601 datetime string.")],
+                    isError: true
+                )
+            }
+            dueAfter = d
+        } else {
+            dueAfter = nil
+        }
+
+        // query / list (plain strings, no validation needed)
+        let query = args["query"]?.stringValue
+        let list = args["list"]?.stringValue
+
+        let wantCompleted = completed == true
+
         do {
-            let reminders = try await service.listReminders(limit: limit)
+            let reminders = try await service.listReminders(
+                limit: limit,
+                query: query,
+                completed: completed,
+                priority: priority,
+                list: list,
+                dueBefore: dueBefore,
+                dueAfter: dueAfter
+            )
             if reminders.isEmpty {
-                return CallTool.Result(content: [.text("No incomplete reminders found.")])
+                let state = wantCompleted ? "completed" : "incomplete"
+                return CallTool.Result(content: [.text("No \(state) reminders found matching your filters.")])
             }
             let json = try jsonString(reminders)
             let header = limit != nil ? "Showing up to \(limit!) reminders:\n" : ""
