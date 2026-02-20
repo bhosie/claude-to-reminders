@@ -3,20 +3,28 @@ import Foundation
 
 /// In-memory mock for unit testing tool handlers without EventKit or permissions.
 final class MockRemindersService: RemindersService, @unchecked Sendable {
-    // Stored reminders, keyed by ID.
     private(set) var reminders: [String: ReminderDTO] = [:]
 
-    // Optionally inject errors to test failure paths.
     var listError: Error?
     var createError: Error?
+    var getError: Error?
+    var updateError: Error?
+    var completeError: Error?
+    var deleteError: Error?
 
     func listReminders(limit: Int?) async throws -> [ReminderDTO] {
         if let error = listError { throw error }
         var results = Array(reminders.values)
-        if let limit {
-            results = Array(results.prefix(limit))
-        }
+        if let limit { results = Array(results.prefix(limit)) }
         return results
+    }
+
+    func getReminder(id: String) async throws -> ReminderDTO {
+        if let error = getError { throw error }
+        guard let reminder = reminders[id] else {
+            throw MockError.notFound(id)
+        }
+        return reminder
     }
 
     func createReminder(
@@ -40,5 +48,68 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
         )
         reminders[dto.id] = dto
         return dto
+    }
+
+    func updateReminder(
+        id: String,
+        title: String?,
+        notes: String?,
+        dueDate: Date?,
+        priority: Priority?,
+        list: String?
+    ) async throws -> ReminderDTO {
+        if let error = updateError { throw error }
+        guard let existing = reminders[id] else {
+            throw MockError.notFound(id)
+        }
+        let updated = ReminderDTO(
+            id: existing.id,
+            title: title ?? existing.title,
+            notes: notes ?? existing.notes,
+            dueDate: dueDate ?? existing.dueDate,
+            priority: priority ?? existing.priority,
+            list: list ?? existing.list,
+            completed: existing.completed,
+            createdAt: existing.createdAt,
+            updatedAt: Date()
+        )
+        reminders[id] = updated
+        return updated
+    }
+
+    func completeReminder(id: String) async throws -> ReminderDTO {
+        if let error = completeError { throw error }
+        guard let existing = reminders[id] else {
+            throw MockError.notFound(id)
+        }
+        let updated = ReminderDTO(
+            id: existing.id,
+            title: existing.title,
+            notes: existing.notes,
+            dueDate: existing.dueDate,
+            priority: existing.priority,
+            list: existing.list,
+            completed: true,
+            createdAt: existing.createdAt,
+            updatedAt: Date()
+        )
+        reminders[id] = updated
+        return updated
+    }
+
+    func deleteReminder(id: String) async throws {
+        if let error = deleteError { throw error }
+        guard reminders[id] != nil else {
+            throw MockError.notFound(id)
+        }
+        reminders.removeValue(forKey: id)
+    }
+
+    enum MockError: Error, LocalizedError {
+        case notFound(String)
+        var errorDescription: String? {
+            if case .notFound(let id) = self { return "Reminder not found with ID: \(id)" }
+            return nil
+        }
     }
 }

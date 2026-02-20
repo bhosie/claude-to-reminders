@@ -48,7 +48,6 @@ struct ListRemindersTests {
         }
         let result = await ToolHandlers.listReminders(args: ["limit": Value.int(3)], service: mock)
         #expect(result.isError != true)
-        // Decode result and verify count
         let text = result.content.first?.textValue ?? ""
         #expect(text.contains("Showing up to 3 reminders"))
     }
@@ -66,6 +65,36 @@ struct ListRemindersTests {
         let mock = MockRemindersService()
         mock.listError = TestError.intentional
         let result = await ToolHandlers.listReminders(args: [:], service: mock)
+        #expect(result.isError == true)
+        #expect(result.content.first?.textValue?.contains("Error") == true)
+    }
+}
+
+// MARK: - get_reminder
+
+@Suite("get_reminder tool")
+struct GetReminderTests {
+    @Test("returns reminder JSON by ID")
+    func returnsReminder() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Find me", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let result = await ToolHandlers.getReminder(args: ["id": .string(created.id)], service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("Find me") == true)
+    }
+
+    @Test("returns error when ID is missing")
+    func missingId() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.getReminder(args: [:], service: mock)
+        #expect(result.isError == true)
+        #expect(result.content.first?.textValue?.contains("Missing required argument") == true)
+    }
+
+    @Test("returns error when reminder not found")
+    func notFound() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.getReminder(args: ["id": .string("nonexistent")], service: mock)
         #expect(result.isError == true)
         #expect(result.content.first?.textValue?.contains("Error") == true)
     }
@@ -127,10 +156,7 @@ struct CreateReminderTests {
     @Test("returns error for invalid due_date format")
     func invalidDueDate() async {
         let mock = MockRemindersService()
-        let args: [String: Value] = [
-            "title": .string("Test"),
-            "due_date": .string("not-a-date")
-        ]
+        let args: [String: Value] = ["title": .string("Test"), "due_date": .string("not-a-date")]
         let result = await ToolHandlers.createReminder(args: args, service: mock)
         #expect(result.isError == true)
         #expect(result.content.first?.textValue?.contains("ISO 8601") == true)
@@ -140,10 +166,7 @@ struct CreateReminderTests {
     @Test("returns error for invalid priority value")
     func invalidPriority() async {
         let mock = MockRemindersService()
-        let args: [String: Value] = [
-            "title": .string("Test"),
-            "priority": .string("urgent")
-        ]
+        let args: [String: Value] = ["title": .string("Test"), "priority": .string("urgent")]
         let result = await ToolHandlers.createReminder(args: args, service: mock)
         #expect(result.isError == true)
         #expect(result.content.first?.textValue?.contains("priority") == true)
@@ -154,10 +177,128 @@ struct CreateReminderTests {
     func serviceError() async {
         let mock = MockRemindersService()
         mock.createError = TestError.intentional
-        let args: [String: Value] = ["title": .string("Test")]
-        let result = await ToolHandlers.createReminder(args: args, service: mock)
+        let result = await ToolHandlers.createReminder(args: ["title": .string("Test")], service: mock)
         #expect(result.isError == true)
-        #expect(result.content.first?.textValue?.contains("Error") == true)
+    }
+}
+
+// MARK: - update_reminder
+
+@Suite("update_reminder tool")
+struct UpdateReminderTests {
+    @Test("updates title")
+    func updatesTitle() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Old title", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let result = await ToolHandlers.updateReminder(
+            args: ["id": .string(created.id), "title": .string("New title")],
+            service: mock
+        )
+        #expect(result.isError != true)
+        #expect(mock.reminders[created.id]?.title == "New title")
+    }
+
+    @Test("updates priority")
+    func updatesPriority() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Task", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let result = await ToolHandlers.updateReminder(
+            args: ["id": .string(created.id), "priority": .string("high")],
+            service: mock
+        )
+        #expect(result.isError != true)
+        #expect(mock.reminders[created.id]?.priority == .high)
+    }
+
+    @Test("returns error when ID is missing")
+    func missingId() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.updateReminder(args: ["title": .string("X")], service: mock)
+        #expect(result.isError == true)
+        #expect(result.content.first?.textValue?.contains("Missing required argument") == true)
+    }
+
+    @Test("returns error for invalid priority")
+    func invalidPriority() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Task", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let result = await ToolHandlers.updateReminder(
+            args: ["id": .string(created.id), "priority": .string("critical")],
+            service: mock
+        )
+        #expect(result.isError == true)
+    }
+
+    @Test("returns error when reminder not found")
+    func notFound() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.updateReminder(
+            args: ["id": .string("bad-id"), "title": .string("X")],
+            service: mock
+        )
+        #expect(result.isError == true)
+    }
+}
+
+// MARK: - complete_reminder
+
+@Suite("complete_reminder tool")
+struct CompleteReminderTests {
+    @Test("marks reminder complete")
+    func completesReminder() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Do the thing", notes: nil, dueDate: nil, priority: .none, list: nil)
+        #expect(mock.reminders[created.id]?.completed == false)
+
+        let result = await ToolHandlers.completeReminder(args: ["id": .string(created.id)], service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("Do the thing") == true)
+        #expect(mock.reminders[created.id]?.completed == true)
+    }
+
+    @Test("returns error when ID is missing")
+    func missingId() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.completeReminder(args: [:], service: mock)
+        #expect(result.isError == true)
+    }
+
+    @Test("returns error when reminder not found")
+    func notFound() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.completeReminder(args: ["id": .string("nope")], service: mock)
+        #expect(result.isError == true)
+    }
+}
+
+// MARK: - delete_reminder
+
+@Suite("delete_reminder tool")
+struct DeleteReminderTests {
+    @Test("deletes reminder")
+    func deletesReminder() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Delete me", notes: nil, dueDate: nil, priority: .none, list: nil)
+        #expect(mock.reminders.count == 1)
+
+        let result = await ToolHandlers.deleteReminder(args: ["id": .string(created.id)], service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("deleted") == true)
+        #expect(mock.reminders.isEmpty)
+    }
+
+    @Test("returns error when ID is missing")
+    func missingId() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.deleteReminder(args: [:], service: mock)
+        #expect(result.isError == true)
+    }
+
+    @Test("returns error when reminder not found")
+    func notFound() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.deleteReminder(args: ["id": .string("ghost")], service: mock)
+        #expect(result.isError == true)
     }
 }
 
@@ -169,13 +310,7 @@ struct MockRemindersServiceTests {
     func storesAllFields() async throws {
         let mock = MockRemindersService()
         let due = Date()
-        let r = try await mock.createReminder(
-            title: "Test",
-            notes: "Some notes",
-            dueDate: due,
-            priority: .medium,
-            list: "Work"
-        )
+        let r = try await mock.createReminder(title: "Test", notes: "Some notes", dueDate: due, priority: .medium, list: "Work")
         #expect(r.title == "Test")
         #expect(r.notes == "Some notes")
         #expect(r.priority == .medium)
@@ -201,32 +336,43 @@ struct MockRemindersServiceTests {
         let r = try await mock.createReminder(title: "X", notes: nil, dueDate: nil, priority: .none, list: nil)
         #expect(r.list == "Reminders")
     }
+
+    @Test("update only changes provided fields")
+    func partialUpdate() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Original", notes: "Keep me", dueDate: nil, priority: .low, list: nil)
+        let updated = try await mock.updateReminder(id: created.id, title: "Changed", notes: nil, dueDate: nil, priority: nil, list: nil)
+        #expect(updated.title == "Changed")
+        #expect(updated.notes == "Keep me")  // preserved
+        #expect(updated.priority == .low)     // preserved
+    }
+
+    @Test("complete sets completed flag")
+    func completeFlag() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Do it", notes: nil, dueDate: nil, priority: .none, list: nil)
+        let completed = try await mock.completeReminder(id: created.id)
+        #expect(completed.completed == true)
+    }
+
+    @Test("delete removes reminder")
+    func deleteRemoves() async throws {
+        let mock = MockRemindersService()
+        let created = try await mock.createReminder(title: "Gone", notes: nil, dueDate: nil, priority: .none, list: nil)
+        try await mock.deleteReminder(id: created.id)
+        #expect(mock.reminders.isEmpty)
+    }
 }
 
 // MARK: - Priority mapping
 
 @Suite("Priority")
 struct PriorityTests {
-    @Test("EK round-trip: high")
-    func highRoundTrip() {
-        #expect(Priority(ekValue: Priority.high.ekValue) == .high)
-    }
-    @Test("EK round-trip: medium")
-    func mediumRoundTrip() {
-        #expect(Priority(ekValue: Priority.medium.ekValue) == .medium)
-    }
-    @Test("EK round-trip: low")
-    func lowRoundTrip() {
-        #expect(Priority(ekValue: Priority.low.ekValue) == .low)
-    }
-    @Test("EK round-trip: none")
-    func noneRoundTrip() {
-        #expect(Priority(ekValue: Priority.none.ekValue) == .none)
-    }
-    @Test("unknown EK value maps to none")
-    func unknownMapsToNone() {
-        #expect(Priority(ekValue: 99) == .none)
-    }
+    @Test("EK round-trip: high")  func highRoundTrip()   { #expect(Priority(ekValue: Priority.high.ekValue) == .high) }
+    @Test("EK round-trip: medium") func mediumRoundTrip() { #expect(Priority(ekValue: Priority.medium.ekValue) == .medium) }
+    @Test("EK round-trip: low")   func lowRoundTrip()    { #expect(Priority(ekValue: Priority.low.ekValue) == .low) }
+    @Test("EK round-trip: none")  func noneRoundTrip()   { #expect(Priority(ekValue: Priority.none.ekValue) == .none) }
+    @Test("unknown EK value maps to none") func unknownMapsToNone() { #expect(Priority(ekValue: 99) == .none) }
 }
 
 // MARK: - Helpers
@@ -241,4 +387,3 @@ extension Tool.Content {
         return nil
     }
 }
-

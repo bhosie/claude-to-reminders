@@ -10,8 +10,6 @@ final class EventKitRemindersService: RemindersService {
 
     // MARK: - Permission
 
-    /// Requests access to reminders if not already granted.
-    /// Throws a descriptive error if the user denies access.
     private func requestAccess() async throws {
         let granted: Bool
         if #available(macOS 14.0, *) {
@@ -40,14 +38,18 @@ final class EventKitRemindersService: RemindersService {
                 var results = ekReminders
                     .filter { !$0.isCompleted }
                     .map { ReminderDTO(from: $0) }
-
                 if let limit {
                     results = Array(results.prefix(limit))
                 }
-
                 continuation.resume(returning: results)
             }
         }
+    }
+
+    func getReminder(id: String) async throws -> ReminderDTO {
+        try await requestAccess()
+        let reminder = try fetchReminder(id: id)
+        return ReminderDTO(from: reminder)
     }
 
     func createReminder(
@@ -59,33 +61,75 @@ final class EventKitRemindersService: RemindersService {
     ) async throws -> ReminderDTO {
         try await requestAccess()
 
-        // Find the named list, fall back to the default list.
         let calendar = namedCalendar(list) ?? store.defaultCalendarForNewReminders()
-        guard let calendar else {
-            throw ServiceError.noDefaultList
-        }
+        guard let calendar else { throw ServiceError.noDefaultList }
 
         let reminder = EKReminder(eventStore: store)
         reminder.title = title
         reminder.calendar = calendar
         reminder.notes = notes
         reminder.priority = priority.ekValue
-
         if let dueDate {
-            // EventKit stores due dates as DateComponents, not Date.
             reminder.dueDateComponents = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute, .second],
-                from: dueDate
-            )
+                [.year, .month, .day, .hour, .minute, .second], from: dueDate)
         }
 
         try store.save(reminder, commit: true)
         return ReminderDTO(from: reminder)
     }
 
+    func updateReminder(
+        id: String,
+        title: String?,
+        notes: String?,
+        dueDate: Date?,
+        priority: Priority?,
+        list: String?
+    ) async throws -> ReminderDTO {
+        try await requestAccess()
+        let reminder = try fetchReminder(id: id)
+
+        if let title { reminder.title = title }
+        if let notes { reminder.notes = notes }
+        if let priority { reminder.priority = priority.ekValue }
+        if let dueDate {
+            reminder.dueDateComponents = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second], from: dueDate)
+        }
+        if let list, let calendar = namedCalendar(list) {
+            reminder.calendar = calendar
+        }
+
+        try store.save(reminder, commit: true)
+        return ReminderDTO(from: reminder)
+    }
+
+    func completeReminder(id: String) async throws -> ReminderDTO {
+        try await requestAccess()
+        let reminder = try fetchReminder(id: id)
+        reminder.isCompleted = true
+        reminder.completionDate = Date()
+        try store.save(reminder, commit: true)
+        return ReminderDTO(from: reminder)
+    }
+
+    func deleteReminder(id: String) async throws {
+        try await requestAccess()
+        let reminder = try fetchReminder(id: id)
+        try store.remove(reminder, commit: true)
+    }
+
     // MARK: - Helpers
 
-    /// Returns the EKCalendar with the given name, or nil if not found.
+    private func fetchReminder(id: String) throws -> EKReminder {
+        guard let item = store.calendarItem(withIdentifier: id),
+              let reminder = item as? EKReminder
+        else {
+            throw ServiceError.reminderNotFound(id)
+        }
+        return reminder
+    }
+
     private func namedCalendar(_ name: String?) -> EKCalendar? {
         guard let name, !name.isEmpty else { return nil }
         return store.calendars(for: .reminder)
@@ -97,6 +141,7 @@ final class EventKitRemindersService: RemindersService {
     enum ServiceError: Error, LocalizedError {
         case permissionDenied
         case noDefaultList
+        case reminderNotFound(String)
 
         var errorDescription: String? {
             switch self {
@@ -104,6 +149,8 @@ final class EventKitRemindersService: RemindersService {
                 return "Access to Reminders was denied. Grant access in System Settings > Privacy & Security > Reminders."
             case .noDefaultList:
                 return "No default Reminders list found. Open Reminders.app and ensure at least one list exists."
+            case .reminderNotFound(let id):
+                return "Reminder not found with ID: \(id)"
             }
         }
     }

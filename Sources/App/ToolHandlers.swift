@@ -17,7 +17,6 @@ enum ToolHandlers {
         args: [String: Value],
         service: any RemindersService
     ) async -> CallTool.Result {
-        // Optional limit: must be a positive integer if provided.
         let limit: Int?
         if let limitValue = args["limit"] {
             guard let n = limitValue.intValue, n > 0 else {
@@ -47,13 +46,36 @@ enum ToolHandlers {
         }
     }
 
+    // MARK: - get_reminder
+
+    static func getReminder(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let id = args["id"]?.stringValue, !id.isEmpty else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: id")],
+                isError: true
+            )
+        }
+        do {
+            let reminder = try await service.getReminder(id: id)
+            let json = try jsonString(reminder)
+            return CallTool.Result(content: [.text(json)])
+        } catch {
+            return CallTool.Result(
+                content: [.text("Error getting reminder: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
+
     // MARK: - create_reminder
 
     static func createReminder(
         args: [String: Value],
         service: any RemindersService
     ) async -> CallTool.Result {
-        // title is required.
         guard let titleValue = args["title"],
               let title = titleValue.stringValue,
               !title.isEmpty
@@ -64,10 +86,8 @@ enum ToolHandlers {
             )
         }
 
-        // notes — optional string.
         let notes = args["notes"]?.stringValue
 
-        // due_date — optional ISO 8601 string.
         let dueDate: Date?
         if let dueDateValue = args["due_date"] {
             guard let dateString = dueDateValue.stringValue,
@@ -83,7 +103,6 @@ enum ToolHandlers {
             dueDate = nil
         }
 
-        // priority — optional string, defaults to none.
         let priority: Priority
         if let priorityValue = args["priority"] {
             guard let raw = priorityValue.stringValue,
@@ -99,7 +118,6 @@ enum ToolHandlers {
             priority = .none
         }
 
-        // list — optional string.
         let list = args["list"]?.stringValue
 
         do {
@@ -115,6 +133,118 @@ enum ToolHandlers {
         } catch {
             return CallTool.Result(
                 content: [.text("Error creating reminder: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
+
+    // MARK: - update_reminder
+
+    static func updateReminder(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let id = args["id"]?.stringValue, !id.isEmpty else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: id")],
+                isError: true
+            )
+        }
+
+        let title = args["title"]?.stringValue
+        let notes = args["notes"]?.stringValue
+        let list = args["list"]?.stringValue
+
+        let dueDate: Date?
+        if let dueDateValue = args["due_date"] {
+            guard let dateString = dueDateValue.stringValue,
+                  let parsed = ISO8601DateFormatter().date(from: dateString)
+            else {
+                return CallTool.Result(
+                    content: [.text("Invalid argument: 'due_date' must be an ISO 8601 datetime string.")],
+                    isError: true
+                )
+            }
+            dueDate = parsed
+        } else {
+            dueDate = nil
+        }
+
+        let priority: Priority?
+        if let priorityValue = args["priority"] {
+            guard let raw = priorityValue.stringValue,
+                  let parsed = Priority(rawValue: raw)
+            else {
+                return CallTool.Result(
+                    content: [.text("Invalid argument: 'priority' must be one of: none, low, medium, high.")],
+                    isError: true
+                )
+            }
+            priority = parsed
+        } else {
+            priority = nil
+        }
+
+        do {
+            let reminder = try await service.updateReminder(
+                id: id,
+                title: title,
+                notes: notes,
+                dueDate: dueDate,
+                priority: priority,
+                list: list
+            )
+            let json = try jsonString(reminder)
+            return CallTool.Result(content: [.text("Reminder updated:\n\(json)")])
+        } catch {
+            return CallTool.Result(
+                content: [.text("Error updating reminder: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
+
+    // MARK: - complete_reminder
+
+    static func completeReminder(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let id = args["id"]?.stringValue, !id.isEmpty else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: id")],
+                isError: true
+            )
+        }
+        do {
+            let reminder = try await service.completeReminder(id: id)
+            return CallTool.Result(content: [.text("Reminder \"\(reminder.title)\" marked as complete.")])
+        } catch {
+            return CallTool.Result(
+                content: [.text("Error completing reminder: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
+
+    // MARK: - delete_reminder
+
+    static func deleteReminder(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let id = args["id"]?.stringValue, !id.isEmpty else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: id")],
+                isError: true
+            )
+        }
+        do {
+            try await service.deleteReminder(id: id)
+            return CallTool.Result(content: [.text("Reminder deleted.")])
+        } catch {
+            return CallTool.Result(
+                content: [.text("Error deleting reminder: \(error.localizedDescription)")],
                 isError: true
             )
         }
