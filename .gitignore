@@ -1,0 +1,6 @@
+.build/
+*.o
+*.d
+Package.resolved
+.swiftpm/
+.DS_Store
