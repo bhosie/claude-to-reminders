@@ -81,13 +81,14 @@ The `RemindersService` protocol is the key architectural seam — tool handlers 
 | Slice | Status | Description |
 |-------|--------|-------------|
 | 1 — MVP | ✅ Done | `health_check`, `list_reminders`, `create_reminder` |
-| 2 — Rich creation | 🔜 Next | Due dates, notes, priority, target list |
-| 3 — Update & delete | ⬜ | Full CRUD lifecycle |
-| 4 — Search & filter | ⬜ | Query by text, date, priority, list |
-| 5 — List management | ⬜ | Create and browse reminder lists |
-| 6 — Batch operations | ⬜ | Create/complete/delete multiple at once |
-| 7 — Auto-start | ⬜ | launchd service, starts on login |
-| 8 — Calendar | ⬜ | Calendar event management via EventKit |
+| 2 — Rich creation | ✅ Done | Due dates, notes, priority, target list |
+| 3 — Update & delete | ✅ Done | Full CRUD lifecycle |
+| 4 — Search & filter | ✅ Done | Query by text, date, priority, list |
+| 5 — List management | ✅ Done | `list_reminder_lists`, `create_reminder_list` |
+| 6 — Batch operations | ✅ Done | `batch_create_reminders`, `batch_complete_reminders`, `batch_delete_reminders` |
+| 7 — Delete list | 🔜 Next | `delete_reminder_list` |
+| 8 — Auto-start | ⬜ | launchd service, starts on login |
+| 9 — Calendar | ⬜ | Calendar event management via EventKit |
 
 ## Privacy
 
