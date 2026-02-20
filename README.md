@@ -86,9 +86,8 @@ The `RemindersService` protocol is the key architectural seam — tool handlers 
 | 4 — Search & filter | ✅ Done | Query by text, date, priority, list |
 | 5 — List management | ✅ Done | `list_reminder_lists`, `create_reminder_list` |
 | 6 — Batch operations | ✅ Done | `batch_create_reminders`, `batch_complete_reminders`, `batch_delete_reminders` |
-| 7 — Delete list | 🔜 Next | `delete_reminder_list` |
-| 8 — Auto-start | ⬜ | launchd service, starts on login |
-| 9 — Calendar | ⬜ | Calendar event management via EventKit |
+| 7 — Delete list | ✅ Done | `delete_reminder_list` |
+| 8 — Calendar | ⬜ | Calendar event management via EventKit |
 
 ## Privacy
 
