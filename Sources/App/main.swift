@@ -192,6 +192,25 @@ let createReminderListTool = Tool(
     ])
 )
 
+let deleteReminderListTool = Tool(
+    name: "delete_reminder_list",
+    description: "Permanently delete a reminder list and all its reminders. Requires two calls: first without confirm to see a warning, then with confirm: true to execute. Cannot delete the default list.",
+    inputSchema: .object([
+        "type": .string("object"),
+        "properties": .object([
+            "id": .object([
+                "type": .string("string"),
+                "description": .string("The reminder list ID (required). Get it from list_reminder_lists.")
+            ]),
+            "confirm": .object([
+                "type": .string("boolean"),
+                "description": .string("Must be true to actually delete. Omit on the first call to see a warning.")
+            ])
+        ]),
+        "required": .array([.string("id")])
+    ])
+)
+
 let batchCreateRemindersTool = Tool(
     name: "batch_create_reminders",
     description: "Create multiple reminders in one call. Returns created reminders and any failures.",
@@ -263,6 +282,7 @@ await server.withMethodHandler(ListTools.self) { _ in
         deleteReminderTool,
         listReminderListsTool,
         createReminderListTool,
+        deleteReminderListTool,
         batchCreateRemindersTool,
         batchCompleteRemindersTool,
         batchDeleteRemindersTool,
@@ -292,6 +312,8 @@ await server.withMethodHandler(CallTool.self) { params in
         return await ToolHandlers.listReminderLists(service: service)
     case "create_reminder_list":
         return await ToolHandlers.createReminderList(args: args, service: service)
+    case "delete_reminder_list":
+        return await ToolHandlers.deleteReminderList(args: args, service: service)
     case "batch_create_reminders":
         return await ToolHandlers.batchCreateReminders(args: args, service: service)
     case "batch_complete_reminders":

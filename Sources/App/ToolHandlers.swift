@@ -368,6 +368,46 @@ enum ToolHandlers {
         }
     }
 
+    // MARK: - delete_reminder_list
+
+    static func deleteReminderList(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let id = args["id"]?.stringValue, !id.isEmpty else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: id")],
+                isError: true
+            )
+        }
+
+        // Require explicit confirmation to protect against accidental deletion.
+        guard args["confirm"]?.boolValue == true else {
+            let listName: String
+            if let lists = try? await service.listReminderLists(),
+               let match = lists.first(where: { $0.id == id }) {
+                listName = "\"\(match.title)\""
+            } else {
+                listName = "with ID \(id)"
+            }
+            return CallTool.Result(content: [.text(
+                "WARNING: Deleting a reminder list permanently removes it and all its reminders. " +
+                "You are about to delete the list \(listName). " +
+                "To confirm, call delete_reminder_list again with the same id and confirm: true."
+            )])
+        }
+
+        do {
+            try await service.deleteReminderList(id: id)
+            return CallTool.Result(content: [.text("Reminder list deleted.")])
+        } catch {
+            return CallTool.Result(
+                content: [.text("Error deleting reminder list: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
+
     // MARK: - batch_create_reminders
 
     static func batchCreateReminders(

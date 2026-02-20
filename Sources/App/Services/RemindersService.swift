@@ -55,4 +55,7 @@ protocol RemindersService: Sendable {
 
     /// Creates a new reminder list with the given title.
     func createReminderList(title: String) async throws -> ReminderListDTO
+
+    /// Permanently deletes a reminder list by its ID.
+    func deleteReminderList(id: String) async throws
 }

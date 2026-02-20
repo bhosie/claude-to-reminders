@@ -166,6 +166,17 @@ final class EventKitRemindersService: RemindersService {
         }
     }
 
+    func deleteReminderList(id: String) async throws {
+        try await requestAccess()
+        guard let calendar = store.calendars(for: .reminder).first(where: { $0.calendarIdentifier == id }) else {
+            throw ServiceError.reminderListNotFound(id)
+        }
+        guard calendar.calendarIdentifier != store.defaultCalendarForNewReminders()?.calendarIdentifier else {
+            throw ServiceError.cannotDeleteDefaultList
+        }
+        try store.removeCalendar(calendar, commit: true)
+    }
+
     func createReminderList(title: String) async throws -> ReminderListDTO {
         try await requestAccess()
         guard let source = store.defaultCalendarForNewReminders()?.source else {
@@ -200,6 +211,8 @@ final class EventKitRemindersService: RemindersService {
         case permissionDenied
         case noDefaultList
         case reminderNotFound(String)
+        case reminderListNotFound(String)
+        case cannotDeleteDefaultList
 
         var errorDescription: String? {
             switch self {
@@ -209,6 +222,10 @@ final class EventKitRemindersService: RemindersService {
                 return "No default Reminders list found. Open Reminders.app and ensure at least one list exists."
             case .reminderNotFound(let id):
                 return "Reminder not found with ID: \(id)"
+            case .reminderListNotFound(let id):
+                return "Reminder list not found with ID: \(id)"
+            case .cannotDeleteDefaultList:
+                return "Cannot delete the default reminder list."
             }
         }
     }

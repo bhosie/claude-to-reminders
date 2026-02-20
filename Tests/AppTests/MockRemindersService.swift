@@ -16,6 +16,7 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
     var deleteError: Error?
     var listListsError: Error?
     var createListError: Error?
+    var deleteListError: Error?
 
     func listReminders(
         limit: Int?,
@@ -147,11 +148,23 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
         return dto
     }
 
+    func deleteReminderList(id: String) async throws {
+        if let error = deleteListError { throw error }
+        guard let list = lists[id] else { throw MockError.listNotFound(id) }
+        guard !list.isDefault else { throw MockError.cannotDeleteDefault }
+        lists.removeValue(forKey: id)
+    }
+
     enum MockError: Error, LocalizedError {
         case notFound(String)
+        case listNotFound(String)
+        case cannotDeleteDefault
         var errorDescription: String? {
-            if case .notFound(let id) = self { return "Reminder not found with ID: \(id)" }
-            return nil
+            switch self {
+            case .notFound(let id):    return "Reminder not found with ID: \(id)"
+            case .listNotFound(let id): return "Reminder list not found with ID: \(id)"
+            case .cannotDeleteDefault: return "Cannot delete the default reminder list."
+            }
         }
     }
 }

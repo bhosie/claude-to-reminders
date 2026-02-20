@@ -528,6 +528,73 @@ struct CreateReminderListTests {
     }
 }
 
+// MARK: - delete_reminder_list
+
+@Suite("delete_reminder_list tool")
+struct DeleteReminderListTests {
+    @Test("returns warning when confirm is omitted")
+    func warningWithoutConfirm() async throws {
+        let mock = MockRemindersService()
+        let list = try await mock.createReminderList(title: "Temp List")
+        let result = await ToolHandlers.deleteReminderList(args: ["id": .string(list.id)], service: mock)
+        #expect(result.isError != true)
+        let text = result.content.first?.textValue ?? ""
+        #expect(text.contains("WARNING"))
+        #expect(text.contains("Temp List"))
+        #expect(text.contains("confirm: true"))
+        #expect(mock.lists[list.id] != nil)  // not deleted yet
+    }
+
+    @Test("returns warning when confirm is false")
+    func warningWithConfirmFalse() async throws {
+        let mock = MockRemindersService()
+        let list = try await mock.createReminderList(title: "Another List")
+        let result = await ToolHandlers.deleteReminderList(args: ["id": .string(list.id), "confirm": .bool(false)], service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("WARNING") == true)
+        #expect(mock.lists[list.id] != nil)  // not deleted yet
+    }
+
+    @Test("deletes a non-default list when confirm is true")
+    func deletesWithConfirm() async throws {
+        let mock = MockRemindersService()
+        let list = try await mock.createReminderList(title: "Temp List")
+        let result = await ToolHandlers.deleteReminderList(args: ["id": .string(list.id), "confirm": .bool(true)], service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("deleted") == true)
+        #expect(mock.lists[list.id] == nil)
+    }
+
+    @Test("returns error when id is missing")
+    func missingId() async {
+        let result = await ToolHandlers.deleteReminderList(args: [:], service: MockRemindersService())
+        #expect(result.isError == true)
+        #expect(result.content.first?.textValue?.contains("Missing required argument") == true)
+    }
+
+    @Test("returns error when list not found and confirm is true")
+    func notFound() async {
+        let result = await ToolHandlers.deleteReminderList(args: ["id": .string("ghost-id"), "confirm": .bool(true)], service: MockRemindersService())
+        #expect(result.isError == true)
+    }
+
+    @Test("returns error when attempting to delete default list with confirm true")
+    func cannotDeleteDefault() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.deleteReminderList(args: ["id": .string("default"), "confirm": .bool(true)], service: mock)
+        #expect(result.isError == true)
+        #expect(result.content.first?.textValue?.lowercased().contains("default") == true)
+    }
+
+    @Test("returns error result when service throws with confirm true")
+    func serviceError() async {
+        let mock = MockRemindersService()
+        mock.deleteListError = TestError.intentional
+        let result = await ToolHandlers.deleteReminderList(args: ["id": .string("any-id"), "confirm": .bool(true)], service: mock)
+        #expect(result.isError == true)
+    }
+}
+
 // MARK: - batch_create_reminders
 
 @Suite("batch_create_reminders tool")
