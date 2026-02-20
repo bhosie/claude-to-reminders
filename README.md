@@ -28,21 +28,32 @@ cd claude-to-reminders
 
 **First use:** macOS will prompt for Reminders access. Grant it once and it persists.
 
-## Available tools (Slice 1)
+## Available tools
 
 | Tool | Description |
 |------|-------------|
 | `health_check` | Verify the server is running |
-| `list_reminders` | List all incomplete reminders |
-| `create_reminder` | Create a reminder by title |
-
-More tools are added with each slice — see [Implementation Plan](#implementation-plan) below.
+| `list_reminders` | List reminders with optional filters: `query`, `completed`, `priority`, `list`, `due_before`, `due_after`, `limit` |
+| `get_reminder` | Fetch a single reminder by ID |
+| `create_reminder` | Create a reminder with title, notes, due date, priority, and list |
+| `update_reminder` | Update any fields on an existing reminder |
+| `complete_reminder` | Mark a reminder as completed |
+| `delete_reminder` | Permanently delete a reminder |
+| `list_reminder_lists` | List all reminder lists |
+| `create_reminder_list` | Create a new reminder list |
+| `delete_reminder_list` | Delete a reminder list (two-step confirmation required) |
+| `batch_create_reminders` | Create multiple reminders in one call |
+| `batch_complete_reminders` | Complete multiple reminders by ID |
+| `batch_delete_reminders` | Delete multiple reminders by ID |
 
 ## Example usage
 
-> "Add a reminder to call the dentist"
-> "What's on my reminder list?"
-> "Do I have anything in my Work list?"
+> "Add a reminder to call the dentist on Friday at 9am"
+> "What are my high priority reminders?"
+> "Show me everything in my Projects list"
+> "Mark all the camping reminders as done"
+> "Create reminders for each item on this list..."
+> "What lists do I have?"
 
 ## Development
 
@@ -64,14 +75,15 @@ Sources/App/
 ├── main.swift                          # Server entry point, tool routing
 ├── ToolHandlers.swift                  # Testable handler logic
 ├── Models/
-│   └── ReminderDTO.swift               # Shared data model
+│   ├── ReminderDTO.swift               # Reminder data model + Priority enum
+│   └── ReminderListDTO.swift           # Reminder list data model
 └── Services/
     ├── RemindersService.swift           # Protocol (mockable seam)
     └── EventKitRemindersService.swift   # Real EventKit implementation
 
 Tests/AppTests/
 ├── MockRemindersService.swift          # In-memory mock, no permissions needed
-└── ToolHandlerTests.swift              # Unit tests for all tool handlers
+└── ToolHandlerTests.swift              # 74 unit tests across 15 suites
 ```
 
 The `RemindersService` protocol is the key architectural seam — tool handlers call the protocol, never EventKit directly. This makes all handler logic unit-testable without device permissions.
@@ -87,7 +99,7 @@ The `RemindersService` protocol is the key architectural seam — tool handlers 
 | 5 — List management | ✅ Done | `list_reminder_lists`, `create_reminder_list` |
 | 6 — Batch operations | ✅ Done | `batch_create_reminders`, `batch_complete_reminders`, `batch_delete_reminders` |
 | 7 — Delete list | ✅ Done | `delete_reminder_list` |
-| 8 — Calendar | ⬜ | Calendar event management via EventKit |
+| 8 — Calendar | ⬜ | Calendar event management via EventKit (future) |
 
 ## Privacy
 
