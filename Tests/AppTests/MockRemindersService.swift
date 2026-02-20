@@ -4,6 +4,9 @@ import Foundation
 /// In-memory mock for unit testing tool handlers without EventKit or permissions.
 final class MockRemindersService: RemindersService, @unchecked Sendable {
     private(set) var reminders: [String: ReminderDTO] = [:]
+    private(set) var lists: [String: ReminderListDTO] = [
+        "default": ReminderListDTO(id: "default", title: "Reminders", isDefault: true)
+    ]
 
     var listError: Error?
     var createError: Error?
@@ -11,6 +14,8 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
     var updateError: Error?
     var completeError: Error?
     var deleteError: Error?
+    var listListsError: Error?
+    var createListError: Error?
 
     func listReminders(
         limit: Int?,
@@ -128,6 +133,18 @@ final class MockRemindersService: RemindersService, @unchecked Sendable {
         if let error = deleteError { throw error }
         guard reminders[id] != nil else { throw MockError.notFound(id) }
         reminders.removeValue(forKey: id)
+    }
+
+    func listReminderLists() async throws -> [ReminderListDTO] {
+        if let error = listListsError { throw error }
+        return Array(lists.values).sorted { $0.title < $1.title }
+    }
+
+    func createReminderList(title: String) async throws -> ReminderListDTO {
+        if let error = createListError { throw error }
+        let dto = ReminderListDTO(id: UUID().uuidString, title: title, isDefault: false)
+        lists[dto.id] = dto
+        return dto
     }
 
     enum MockError: Error, LocalizedError {

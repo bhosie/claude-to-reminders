@@ -463,6 +463,71 @@ struct MockRemindersServiceTests {
     }
 }
 
+// MARK: - list_reminder_lists
+
+@Suite("list_reminder_lists tool")
+struct ListReminderListsTests {
+    @Test("returns JSON list of all lists")
+    func returnsLists() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.listReminderLists(service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("Reminders") == true)
+    }
+
+    @Test("includes isDefault flag")
+    func includesIsDefault() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.listReminderLists(service: mock)
+        #expect(result.content.first?.textValue?.contains("isDefault") == true)
+    }
+
+    @Test("returns error result when service throws")
+    func serviceError() async {
+        let mock = MockRemindersService()
+        mock.listListsError = TestError.intentional
+        let result = await ToolHandlers.listReminderLists(service: mock)
+        #expect(result.isError == true)
+    }
+}
+
+// MARK: - create_reminder_list
+
+@Suite("create_reminder_list tool")
+struct CreateReminderListTests {
+    @Test("creates a new list")
+    func createsNewList() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.createReminderList(args: ["title": .string("Shopping")], service: mock)
+        #expect(result.isError != true)
+        #expect(result.content.first?.textValue?.contains("Shopping") == true)
+        #expect(mock.lists.values.contains { $0.title == "Shopping" })
+    }
+
+    @Test("returns error when title is missing")
+    func missingTitle() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.createReminderList(args: [:], service: mock)
+        #expect(result.isError == true)
+        #expect(result.content.first?.textValue?.contains("Missing required argument") == true)
+    }
+
+    @Test("returns error when title is empty")
+    func emptyTitle() async {
+        let mock = MockRemindersService()
+        let result = await ToolHandlers.createReminderList(args: ["title": .string("")], service: mock)
+        #expect(result.isError == true)
+    }
+
+    @Test("returns error result when service throws")
+    func serviceError() async {
+        let mock = MockRemindersService()
+        mock.createListError = TestError.intentional
+        let result = await ToolHandlers.createReminderList(args: ["title": .string("Oops")], service: mock)
+        #expect(result.isError == true)
+    }
+}
+
 // MARK: - Priority mapping
 
 @Suite("Priority")

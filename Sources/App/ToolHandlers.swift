@@ -320,6 +320,53 @@ enum ToolHandlers {
             )
         }
     }
+
+    // MARK: - list_reminder_lists
+
+    static func listReminderLists(
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        do {
+            let lists = try await service.listReminderLists()
+            if lists.isEmpty {
+                return CallTool.Result(content: [.text("No reminder lists found.")])
+            }
+            let json = try jsonString(lists)
+            return CallTool.Result(content: [.text(json)])
+        } catch {
+            return CallTool.Result(
+                content: [.text("Error listing reminder lists: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
+
+    // MARK: - create_reminder_list
+
+    static func createReminderList(
+        args: [String: Value],
+        service: any RemindersService
+    ) async -> CallTool.Result {
+        guard let titleValue = args["title"],
+              let title = titleValue.stringValue,
+              !title.isEmpty
+        else {
+            return CallTool.Result(
+                content: [.text("Missing required argument: title")],
+                isError: true
+            )
+        }
+        do {
+            let list = try await service.createReminderList(title: title)
+            let json = try jsonString(list)
+            return CallTool.Result(content: [.text("Reminder list created:\n\(json)")])
+        } catch {
+            return CallTool.Result(
+                content: [.text("Error creating reminder list: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
 }
 
 // MARK: - Helpers

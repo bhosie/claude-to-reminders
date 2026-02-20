@@ -7,7 +7,7 @@ let service: any RemindersService = EventKitRemindersService()
 
 let server = Server(
     name: "reminders-middleware",
-    version: "0.4.0",
+    version: "0.5.0",
     capabilities: .init(tools: .init(listChanged: false))
 )
 
@@ -171,6 +171,27 @@ let deleteReminderTool = Tool(
     ])
 )
 
+let listReminderListsTool = Tool(
+    name: "list_reminder_lists",
+    description: "List all available reminder lists.",
+    inputSchema: .object(["type": .string("object"), "properties": .object([:])])
+)
+
+let createReminderListTool = Tool(
+    name: "create_reminder_list",
+    description: "Create a new reminder list.",
+    inputSchema: .object([
+        "type": .string("object"),
+        "properties": .object([
+            "title": .object([
+                "type": .string("string"),
+                "description": .string("The name of the new list (required).")
+            ])
+        ]),
+        "required": .array([.string("title")])
+    ])
+)
+
 // MARK: - Tool list handler
 
 await server.withMethodHandler(ListTools.self) { _ in
@@ -182,6 +203,8 @@ await server.withMethodHandler(ListTools.self) { _ in
         updateReminderTool,
         completeReminderTool,
         deleteReminderTool,
+        listReminderListsTool,
+        createReminderListTool,
     ])
 }
 
@@ -204,6 +227,10 @@ await server.withMethodHandler(CallTool.self) { params in
         return await ToolHandlers.completeReminder(args: args, service: service)
     case "delete_reminder":
         return await ToolHandlers.deleteReminder(args: args, service: service)
+    case "list_reminder_lists":
+        return await ToolHandlers.listReminderLists(service: service)
+    case "create_reminder_list":
+        return await ToolHandlers.createReminderList(args: args, service: service)
     default:
         return CallTool.Result(
             content: [.text("Unknown tool: \(params.name)")],

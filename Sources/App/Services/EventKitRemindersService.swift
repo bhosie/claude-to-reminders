@@ -158,6 +158,27 @@ final class EventKitRemindersService: RemindersService {
         try store.remove(try fetchReminder(id: id), commit: true)
     }
 
+    func listReminderLists() async throws -> [ReminderListDTO] {
+        try await requestAccess()
+        let defaultID = store.defaultCalendarForNewReminders()?.calendarIdentifier
+        return store.calendars(for: .reminder).map {
+            ReminderListDTO(id: $0.calendarIdentifier, title: $0.title, isDefault: $0.calendarIdentifier == defaultID)
+        }
+    }
+
+    func createReminderList(title: String) async throws -> ReminderListDTO {
+        try await requestAccess()
+        guard let source = store.defaultCalendarForNewReminders()?.source else {
+            throw ServiceError.noDefaultList
+        }
+        let calendar = EKCalendar(for: .reminder, eventStore: store)
+        calendar.title = title
+        calendar.source = source
+        try store.saveCalendar(calendar, commit: true)
+        let defaultID = store.defaultCalendarForNewReminders()?.calendarIdentifier
+        return ReminderListDTO(id: calendar.calendarIdentifier, title: calendar.title, isDefault: calendar.calendarIdentifier == defaultID)
+    }
+
     // MARK: - Helpers
 
     private func fetchReminder(id: String) throws -> EKReminder {
